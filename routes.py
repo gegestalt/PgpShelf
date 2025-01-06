@@ -4,9 +4,11 @@ import os
 import base64
 from models import db, User, EncryptedFile
 
+
 def init_routes(app: Flask):
-    # Initialize GPG
+    # Initialize GPG with compatibility options
     gpg = gnupg.GPG(gnupghome=os.path.expanduser("~/.gnupg"))
+    gpg.options = ["--digest-algo", "SHA256"]
 
     @app.route('/generate_keys', methods=['POST'])
     def generate_keys():
@@ -21,10 +23,12 @@ def init_routes(app: Flask):
         if User.query.filter_by(user_id=user_id).first():
             return jsonify({"error": "User already exists with generated keys."}), 400
 
-        # Generate PGP key pair with the passphrase
+        # Generate PGP key pair with specific parameters for compatibility
         input_data = gpg.gen_key_input(
             name_email=f"{user_id}@example.com",
-            passphrase=passphrase
+            passphrase=passphrase,
+            key_type="RSA",
+            key_length=2048
         )
         key = gpg.gen_key(input_data)
 
