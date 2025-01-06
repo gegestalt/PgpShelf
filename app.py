@@ -1,30 +1,20 @@
 from flask import Flask, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.padding import OAEP, MGF1
 from cryptography.hazmat.primitives.hashes import SHA256
 from cryptography.hazmat.primitives import serialization
-from flask_sqlalchemy import SQLAlchemy
 import base64
+from models import db, User, EncryptedFile
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///file_data.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-db = SQLAlchemy(app)
+# Initialize the db instance with app
+db.init_app(app)
 
-# Database Models
-class EncryptedFile(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.String(80), nullable=False)
-    file_name = db.Column(db.String(120), nullable=False)
-    encrypted_content = db.Column(db.LargeBinary, nullable=False)
-
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.String(80), unique=True, nullable=False)
-    public_key = db.Column(db.Text, nullable=False)
-    private_key = db.Column(db.Text, nullable=False)
-
+# Helper Functions
 def generate_key_pair():
     """Generate an RSA key pair."""
     private_key = rsa.generate_private_key(
@@ -114,7 +104,7 @@ def upload_file():
 
     return jsonify({
         "message": "File uploaded and encrypted successfully.",
-        "file_id": encrypted_file.id  # Include file_id in the response
+        "file_id": encrypted_file.id
     }), 200
 
 @app.route('/files', methods=['GET'])
