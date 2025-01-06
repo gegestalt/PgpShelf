@@ -18,14 +18,45 @@ def client():
 
     yield client
 
+
+def test_user_registration_with_existing_id(client):
+    """Test user registration with an existing user ID."""
+    user_id = "user1"
+    response = client.post('/generate_keys', data={"user_id": user_id, "passphrase": "testpass"})
+    assert response.status_code == 200
+    assert "PGP keys generated and saved successfully." in response.json["message"]
+
+    # Attempt to register the same user again
+    response = client.post('/generate_keys', data={"user_id": user_id, "passphrase": "testpass"})
+    assert response.status_code == 400
+    assert "User already exists with generated keys." in response.json["error"]
+
+
+def test_file_upload_without_registration(client):
+    """Test file upload without user registration."""
+    user_id = "nonexistent_user"
+    file_data = b"This is a test file."
+    file_storage = FileStorage(
+        stream=BytesIO(file_data),
+        filename="test_file.txt",
+        content_type="text/plain"
+    )
+    response = client.post('/upload', data={
+        "user_id": user_id,
+        "file": file_storage
+    }, content_type='multipart/form-data')
+    assert response.status_code == 404
+    assert "User not found." in response.json["error"]
+
+
 def test_user_registration_and_upload(client):
     """Test user registration, file upload, and listing."""
     # Step 1: Register User 1
     user1_id = "user1"
     user1_name = "Test User 1"
-    response = client.post('/generate_keys', data={"user_id": user1_id})
+    response = client.post('/generate_keys', data={"user_id": user1_id, "passphrase": "testpass"})
     assert response.status_code == 200
-    assert "Keys generated and saved successfully." in response.json["message"]
+    assert "PGP keys generated and saved successfully." in response.json["message"]
     
     # Verify User 1 in the database
     with app.app_context():
@@ -54,9 +85,9 @@ def test_user_registration_and_upload(client):
     # Step 3: Register User 2
     user2_id = "user2"
     user2_name = "Test User 2"
-    response = client.post('/generate_keys', data={"user_id": user2_id})
+    response = client.post('/generate_keys', data={"user_id": user2_id, "passphrase": "testpass"})
     assert response.status_code == 200
-    assert "Keys generated and saved successfully." in response.json["message"]
+    assert "PGP keys generated and saved successfully." in response.json["message"]
 
     with app.app_context():
         user2 = User.query.filter_by(user_id=user2_id).first()

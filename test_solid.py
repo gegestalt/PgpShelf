@@ -1,7 +1,8 @@
 from werkzeug.datastructures import FileStorage
 from io import BytesIO
 import pytest
-from app import app, db, User, EncryptedFile
+from app import app, db
+from models import User,EncryptedFile
 from datetime import datetime
 
 @pytest.fixture
