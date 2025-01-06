@@ -52,6 +52,12 @@ def generate_keys():
     if not user_id:
         return jsonify({"error": "User ID is required."}), 400
 
+    # Check if the user already exists
+    existing_user = User.query.filter_by(user_id=user_id).first()
+    if existing_user:
+        return jsonify({"error": "User already exists with generated keys."}), 400
+
+    # Generate new keys
     private_key, public_key = generate_key_pair()
 
     private_key_pem = private_key.private_bytes(
@@ -64,11 +70,7 @@ def generate_keys():
         format=serialization.PublicFormat.SubjectPublicKeyInfo
     )
 
-    # Save keys in the database
-    user = User.query.filter_by(user_id=user_id).first()
-    if user:
-        return jsonify({"error": "User already exists."}), 400
-
+    # Save the new user with keys in the database
     new_user = User(
         user_id=user_id,
         public_key=public_key_pem.decode('utf-8'),
@@ -110,7 +112,10 @@ def upload_file():
     db.session.add(encrypted_file)
     db.session.commit()
 
-    return jsonify({"message": "File uploaded and encrypted successfully."}), 200
+    return jsonify({
+        "message": "File uploaded and encrypted successfully.",
+        "file_id": encrypted_file.id  # Include file_id in the response
+    }), 200
 
 @app.route('/files', methods=['GET'])
 def list_files():
@@ -124,6 +129,62 @@ def list_files():
 
     file_list = [{"file_name": f.file_name, "id": f.id} for f in files]
     return jsonify({"files": file_list}), 200
+
+
+@app.route('/decrypt', methods=['POST'])
+def decrypt_file():
+    """Endpoint to decrypt a file."""
+    # Retrieve parameters from the request
+    user_id = request.form.get('user_id')
+    file_id = request.form.get('file_id')
+
+    # Validate the input parameters
+    if not user_id or not file_id:
+        print("Debug: Missing user_id or file_id")
+        return jsonify({"error": "User ID and File ID are required."}), 400
+
+    # Retrieve the user from the database
+    user = User.query.filter_by(user_id=user_id).first()
+    if not user:
+        print(f"Debug: User not found for user_id={user_id}")
+        return jsonify({"error": "User not found."}), 404
+
+    # Retrieve the file from the database
+    encrypted_file = EncryptedFile.query.filter_by(id=file_id, user_id=user_id).first()
+    if not encrypted_file:
+        print(f"Debug: File not found or unauthorized access for file_id={file_id}, user_id={user_id}")
+        return jsonify({"error": "File not found or does not belong to the user."}), 404
+
+    # Load the user's private key
+    try:
+        private_key = serialization.load_pem_private_key(
+            user.private_key.encode('utf-8'),
+            password=None
+        )
+        print("Debug: Private key successfully loaded")
+    except Exception as e:
+        print(f"Debug: Failed to load private key. Error: {e}")
+        return jsonify({"error": "Failed to load private key.", "details": str(e)}), 500
+
+    # Decrypt the file content
+    try:
+        decrypted_content = private_key.decrypt(
+            encrypted_file.encrypted_content,
+            OAEP(
+                mgf=MGF1(algorithm=SHA256()),
+                algorithm=SHA256(),
+                label=None
+            )
+        )
+        print("Debug: File decrypted successfully")
+    except Exception as e:
+        print(f"Debug: Decryption failed. Error: {e}")
+        return jsonify({"error": "Decryption failed.", "details": str(e)}), 500
+
+    return jsonify({
+        "file_name": encrypted_file.file_name,
+        "content": decrypted_content.decode('utf-8')
+    }), 200
 
 @app.route('/list', methods=['GET'])
 def list_all_files():
