@@ -2,8 +2,8 @@ from flask import Flask, request, jsonify
 import gnupg
 import os
 import base64
+from datetime import datetime
 from models import db, User, EncryptedFile
-
 
 def init_routes(app: Flask):
     # Initialize GPG with compatibility options
@@ -30,7 +30,6 @@ def init_routes(app: Flask):
             key_type="RSA",
             key_length=2048,
             preferences="SHA256 SHA1 AES AES192 AES256"
-            
         )
         key = gpg.gen_key(input_data)
 
@@ -81,7 +80,8 @@ def init_routes(app: Flask):
         encrypted_file = EncryptedFile(
             user_id=user_id,
             file_name=uploaded_file.filename,
-            encrypted_content=str(encrypted_data).encode('utf-8')
+            encrypted_content=str(encrypted_data).encode('utf-8'),
+            upload_date=datetime.utcnow()
         )
         db.session.add(encrypted_file)
         db.session.commit()
@@ -104,7 +104,7 @@ def init_routes(app: Flask):
         if not files:
             return jsonify({"message": "No files found for this user."}), 200
 
-        file_list = [{"file_name": f.file_name, "id": f.id} for f in files]
+        file_list = [{"file_name": f.file_name, "id": f.id, "upload_date": f.upload_date} for f in files]
         return jsonify({"files": file_list}), 200
 
     @app.route('/decrypt', methods=['POST'])
@@ -151,7 +151,8 @@ def init_routes(app: Flask):
             {
                 "file_name": f.file_name,
                 "user_id": f.user_id,
-                "encrypted_content": base64.b64encode(f.encrypted_content).decode('utf-8')
+                "encrypted_content": base64.b64encode(f.encrypted_content).decode('utf-8'),
+                "upload_date": f.upload_date
             }
             for f in files
         ]
@@ -166,5 +167,6 @@ def init_routes(app: Flask):
 
         return jsonify({
             "file_name": encrypted_file.file_name,
-            "encrypted_content": base64.b64encode(encrypted_file.encrypted_content).decode('utf-8')
+            "encrypted_content": base64.b64encode(encrypted_file.encrypted_content).decode('utf-8'),
+            "upload_date": encrypted_file.upload_date
         }), 200

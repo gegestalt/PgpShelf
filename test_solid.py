@@ -2,7 +2,7 @@ from werkzeug.datastructures import FileStorage
 from io import BytesIO
 import pytest
 from app import app, db
-from models import User,EncryptedFile
+from models import User, EncryptedFile
 from datetime import datetime
 
 @pytest.fixture
@@ -24,7 +24,7 @@ def test_generate_keys(client):
     passphrase = "test_passphrase"
     response = client.post('/generate_keys', data={"user_id": user_id, "passphrase": passphrase})
     assert response.status_code == 200
-    assert "PGP keys generated and saved successfully." in response.json["message"]  # Updated assertion
+    assert "PGP keys generated and saved successfully." in response.json["message"]
     print("Debug: Key pair generated successfully.")
 
     with app.app_context():
@@ -33,7 +33,6 @@ def test_generate_keys(client):
         assert user is not None, "User not found in database."
         assert user.public_key is not None, "Public key not saved."
         assert user.private_key is not None, "Private key not saved."
-
 
 def test_upload_file(client):
     """Test file upload for a user."""
@@ -89,8 +88,7 @@ def test_list_user_files(client):
     print(f"Debug: File list response={file_list}")
     assert len(file_list) == 1, "File list does not contain the uploaded file."
     assert file_list[0]["file_name"] == "test_file.txt", "Uploaded file name mismatch."
-
-
+    assert "upload_date" in file_list[0], "Upload date not found in response."
 
 def test_decrypt_file(client):
     """Test decrypting an uploaded file."""
@@ -144,3 +142,4 @@ def test_list_all_files(client):
     assert len(all_files) == 1, "Unexpected number of files in the system."
     assert all_files[0]["file_name"] == "test_file.txt", "Listed file name mismatch."
     assert all_files[0]["user_id"] == user_id, "Listed file user_id mismatch."
+    assert "upload_date" in all_files[0], "Upload date not found in response."

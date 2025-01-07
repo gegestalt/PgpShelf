@@ -1,5 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
-
+from datetime import datetime
 # The db instance will be initialized in app.py
 db = SQLAlchemy()
 
@@ -9,6 +9,8 @@ class EncryptedFile(db.Model):
     user_id = db.Column(db.String(80), nullable=False)
     file_name = db.Column(db.String(120), nullable=False)
     encrypted_content = db.Column(db.LargeBinary, nullable=False)
+    upload_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
