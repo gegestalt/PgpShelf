@@ -28,7 +28,9 @@ def init_routes(app: Flask):
             name_email=f"{user_id}@example.com",
             passphrase=passphrase,
             key_type="RSA",
-            key_length=2048
+            key_length=2048,
+            preferences="SHA256 SHA1 AES AES192 AES256"
+            
         )
         key = gpg.gen_key(input_data)
 
