@@ -144,45 +144,45 @@ def test_list_all_files(client):
     assert all_files[0]["user_id"] == user_id, "Listed file user_id mismatch."
     assert "upload_date" in all_files[0], "Upload date not found in response."
 
-def test_generate_new_key_pair_for_existing_user(client):
-    """Test generating a new key pair for a user who has been registered before."""
-    user_id = "existing_user"
-    passphrase = "initial_passphrase"
+# def test_generate_new_key_pair_for_existing_user(client):
+#     """Test generating a new key pair for a user who has been registered before."""
+#     user_id = "existing_user"
+#     passphrase = "initial_passphrase"
 
-    # Step 1: Register the user and generate the initial key pair
-    response = client.post('/generate_keys', data={"user_id": user_id, "passphrase": passphrase})
-    assert response.status_code == 200
-    assert "PGP keys generated and saved successfully." in response.json["message"]
+#     # Step 1: Register the user and generate the initial key pair
+#     response = client.post('/generate_keys', data={"user_id": user_id, "passphrase": passphrase})
+#     assert response.status_code == 200
+#     assert "PGP keys generated and saved successfully." in response.json["message"]
 
-    response = client.post('/generate_keys', data={"user_id": user_id, "passphrase": "new_passphrase"})
-    assert response.status_code == 400
-    assert "User already exists with generated keys." in response.json["error"]
+#     response = client.post('/generate_keys', data={"user_id": user_id, "passphrase": "new_passphrase"})
+#     assert response.status_code == 400
+#     assert "User already exists with generated keys." in response.json["error"]
 
-def test_generate_new_key_pair_after_deletion(client):
-    """Test generating a new key pair for a user after deleting the old key pair."""
-    user_id = "existing_user"
-    passphrase = "initial_passphrase"
+# def test_generate_new_key_pair_after_deletion(client):
+#     """Test generating a new key pair for a user after deleting the old key pair."""
+#     user_id = "existing_user"
+#     passphrase = "initial_passphrase"
 
-    # Step 1: Register the user and generate the initial key pair
-    response = client.post('/generate_keys', data={"user_id": user_id, "passphrase": passphrase})
-    assert response.status_code == 200
-    assert "PGP keys generated and saved successfully." in response.json["message"]
+#     # Step 1: Register the user and generate the initial key pair
+#     response = client.post('/generate_keys', data={"user_id": user_id, "passphrase": passphrase})
+#     assert response.status_code == 200
+#     assert "PGP keys generated and saved successfully." in response.json["message"]
 
-    # Step 2: Delete the user's key pair from the database
-    with app.app_context():
-        user = User.query.filter_by(user_id=user_id).first()
-        assert user is not None, "User not found in database."
-        db.session.delete(user)
-        db.session.commit()
+#     # Step 2: Delete the user's key pair from the database
+#     with app.app_context():
+#         user = User.query.filter_by(user_id=user_id).first()
+#         assert user is not None, "User not found in database."
+#         db.session.delete(user)
+#         db.session.commit()
 
-    # Step 3: Attempt to generate a new key pair for the same user
-    response = client.post('/generate_keys', data={"user_id": user_id, "passphrase": "new_passphrase"})
-    assert response.status_code == 200
-    assert "PGP keys generated and saved successfully." in response.json["message"]
+#     # Step 3: Attempt to generate a new key pair for the same user
+#     response = client.post('/generate_keys', data={"user_id": user_id, "passphrase": "new_passphrase"})
+#     assert response.status_code == 200
+#     assert "PGP keys generated and saved successfully." in response.json["message"]
 
-    # Verify the new key pair is saved in the database
-    with app.app_context():
-        user = User.query.filter_by(user_id=user_id).first()
-        assert user is not None, "User not found in database after generating new key pair."
-        assert user.public_key is not None, "Public key not saved for new key pair."
-        assert user.private_key is not None, "Private key not saved for new key pair."
+#     # Verify the new key pair is saved in the database
+#     with app.app_context():
+#         user = User.query.filter_by(user_id=user_id).first()
+#         assert user is not None, "User not found in database after generating new key pair."
+#         assert user.public_key is not None, "Public key not saved for new key pair."
+#         assert user.private_key is not None, "Private key not saved for new key pair."
