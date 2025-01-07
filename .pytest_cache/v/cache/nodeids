@@ -1,0 +1,10 @@
+[
+  "test_solid.py::test_decrypt_file",
+  "test_solid.py::test_generate_keys",
+  "test_solid.py::test_list_all_files",
+  "test_solid.py::test_list_user_files",
+  "test_solid.py::test_upload_file",
+  "test_user.py::test_file_upload_without_registration",
+  "test_user.py::test_user_registration_and_upload",
+  "test_user.py::test_user_registration_with_existing_id"
+]
