@@ -27,7 +27,6 @@ def test_generate_keys(client):
     assert "PGP keys generated and saved successfully." in response.json["message"]  # Updated assertion
     print("Debug: Key pair generated successfully.")
 
-    # Verify user is saved in the database
     with app.app_context():
         user = User.query.filter_by(user_id=user_id).first()
         print(f"Debug: User in database={user is not None}")
@@ -40,7 +39,6 @@ def test_upload_file(client):
     """Test file upload for a user."""
     user_id = "test_user"
     passphrase = "test_passphrase"
-    # Ensure the user exists by generating keys
     client.post('/generate_keys', data={"user_id": user_id, "passphrase": passphrase})
 
     file_data = b"This is a test file for encryption and decryption."
@@ -63,7 +61,6 @@ def test_list_user_files(client):
     user_id = "test_user"
     passphrase = "test_passphrase"
 
-    # Step 1: Generate keys
     client.post('/generate_keys', data={"user_id": user_id, "passphrase": passphrase})
 
     # Step 2: Upload the file
