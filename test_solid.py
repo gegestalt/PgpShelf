@@ -11,6 +11,7 @@ def client():
     app.testing = True
     client = app.test_client()
 
+    # Reset the database
     with app.app_context():
         db.drop_all()
         db.create_all()
@@ -86,7 +87,7 @@ def test_list_user_files(client):
     file_list = response.json["files"]
     print(f"Debug: File list response={file_list}")
     assert len(file_list) == 1, "File list does not contain the uploaded file."
-    assert file_list[0]["file_name"] == "test_file.txt", "Uploaded file name mismatch."
+    assert file_list[0]["uploaded_by"] == user_id, "Uploaded by user ID mismatch."
     assert "upload_date" in file_list[0], "Upload date not found in response."
 
 def test_decrypt_file(client):

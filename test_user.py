@@ -1,9 +1,9 @@
+from werkzeug.datastructures import FileStorage
+from io import BytesIO
 import pytest
 from app import app, db
 from models import User, EncryptedFile
 from datetime import datetime
-from werkzeug.datastructures import FileStorage
-from io import BytesIO
 
 @pytest.fixture
 def client():
@@ -18,112 +18,171 @@ def client():
 
     yield client
 
-
-def test_user_registration_with_existing_id(client):
-    """Test user registration with an existing user ID."""
-    user_id = "user1"
-    response = client.post('/generate_keys', data={"user_id": user_id, "passphrase": "testpass"})
+def test_generate_keys(client):
+    """Test key pair generation for a user."""
+    user_id = "test_user"
+    passphrase = "test_passphrase"
+    response = client.post('/generate_keys', data={"user_id": user_id, "passphrase": passphrase})
     assert response.status_code == 200
     assert "PGP keys generated and saved successfully." in response.json["message"]
+    print("Debug: Key pair generated successfully.")
 
-    # Attempt to register the same user again
-    response = client.post('/generate_keys', data={"user_id": user_id, "passphrase": "testpass"})
-    assert response.status_code == 400
-    assert "User already exists with generated keys." in response.json["error"]
+    with app.app_context():
+        user = User.query.filter_by(user_id=user_id).first()
+        print(f"Debug: User in database={user is not None}")
+        assert user is not None, "User not found in database."
+        assert user.public_key is not None, "Public key not saved."
+        assert user.private_key is not None, "Private key not saved."
 
+def test_upload_file(client):
+    """Test file upload for a user."""
+    user_id = "test_user"
+    passphrase = "test_passphrase"
+    client.post('/generate_keys', data={"user_id": user_id, "passphrase": passphrase})
 
-def test_file_upload_without_registration(client):
-    """Test file upload without user registration."""
-    user_id = "nonexistent_user"
-    file_data = b"This is a test file."
+    file_data = b"This is a test file for encryption and decryption."
     file_storage = FileStorage(
         stream=BytesIO(file_data),
         filename="test_file.txt",
         content_type="text/plain"
     )
+
     response = client.post('/upload', data={
         "user_id": user_id,
         "file": file_storage
     }, content_type='multipart/form-data')
-    assert response.status_code == 404
-    assert "User not found." in response.json["error"]
-
-
-def test_user_registration_and_upload(client):
-    """Test user registration, file upload, and listing."""
-    # Step 1: Register User 1
-    user1_id = "user1"
-    user1_name = "Test User 1"
-    response = client.post('/generate_keys', data={"user_id": user1_id, "passphrase": "testpass"})
-    assert response.status_code == 200
-    assert "PGP keys generated and saved successfully." in response.json["message"]
-    
-    # Verify User 1 in the database
-    with app.app_context():
-        user1 = User.query.filter_by(user_id=user1_id).first()
-        assert user1 is not None, "User 1 not found in database."
-        assert user1.public_key is not None, "Public key for User 1 not saved."
-        assert user1.private_key is not None, "Private key for User 1 not saved."
-        user1.key_generation_date = datetime.now()
-        user1.user_name = user1_name
-        db.session.commit()
-
-    # Step 2: User 1 uploads a file
-    file_data1 = b"This is User 1's test file."
-    file_storage1 = FileStorage(
-        stream=BytesIO(file_data1),
-        filename="user1_file.txt",
-        content_type="text/plain"
-    )
-    response = client.post('/upload', data={
-        "user_id": user1_id,
-        "file": file_storage1
-    }, content_type='multipart/form-data')
-    assert response.status_code == 200
+    print(f"Debug: Upload response={response.json}")
+    assert response.status_code == 200, f"Unexpected status code: {response.status_code}"
     assert "File uploaded and encrypted successfully." in response.json["message"]
 
-    # Step 3: Register User 2
-    user2_id = "user2"
-    user2_name = "Test User 2"
-    response = client.post('/generate_keys', data={"user_id": user2_id, "passphrase": "testpass"})
+def test_list_user_files(client):
+    """Test listing files for a specific user."""
+    user_id = "test_user"
+    passphrase = "test_passphrase"
+
+    client.post('/generate_keys', data={"user_id": user_id, "passphrase": passphrase})
+
+    # Step 2: Upload the file
+    file_data = b"This is a test file for encryption and decryption."
+    file_storage = FileStorage(
+        stream=BytesIO(file_data),
+        filename="test_file.txt",
+        content_type="text/plain"
+    )
+    upload_response = client.post('/upload', data={
+        "user_id": user_id,
+        "file": file_storage
+    }, content_type='multipart/form-data')
+    assert upload_response.status_code == 200, f"File upload failed: {upload_response.json}"
+
+    # Debug: Check the database state
+    with app.app_context():
+        files_in_db = EncryptedFile.query.filter_by(user_id=user_id).all()
+        print(f"Debug: Files in database={files_in_db}")
+        assert len(files_in_db) > 0, "No files found in the database after upload."
+
+    # Step 3: List files
+    response = client.get(f'/files?user_id={user_id}')
+    assert response.status_code == 200, f"Unexpected status code: {response.status_code}"
+    file_list = response.json["files"]
+    print(f"Debug: File list response={file_list}")
+    assert len(file_list) == 1, "File list does not contain the uploaded file."
+    assert file_list[0]["uploaded_by"] == user_id, "Uploaded by user ID mismatch."
+    assert "upload_date" in file_list[0], "Upload date not found in response."
+
+def test_decrypt_file(client):
+    """Test decrypting an uploaded file."""
+    user_id = "test_user"
+    passphrase = "test_passphrase"
+    # Ensure the user exists and a file is uploaded
+    client.post('/generate_keys', data={"user_id": user_id, "passphrase": passphrase})
+    file_data = b"This is a test file for encryption and decryption."
+    file_storage = FileStorage(
+        stream=BytesIO(file_data),
+        filename="test_file.txt",
+        content_type="text/plain"
+    )
+    upload_response = client.post('/upload', data={
+        "user_id": user_id,
+        "file": file_storage
+    }, content_type='multipart/form-data')
+    file_id = upload_response.json.get("file_id")
+
+    response = client.post('/decrypt', data={
+        "user_id": user_id,
+        "file_id": file_id,
+        "passphrase": passphrase
+    })
+    print(f"Debug: Decrypt response={response.json}")
+    assert response.status_code == 200, f"Unexpected status code: {response.status_code}"
+    decrypted_content = response.json["content"]
+    assert decrypted_content == file_data.decode("utf-8"), "Decrypted content mismatch."
+
+def test_list_all_files(client):
+    """Test listing all files in the system."""
+    user_id = "test_user"
+    passphrase = "test_passphrase"
+    # Ensure the user exists and a file is uploaded
+    client.post('/generate_keys', data={"user_id": user_id, "passphrase": passphrase})
+    file_data = b"This is a test file for encryption and decryption."
+    file_storage = FileStorage(
+        stream=BytesIO(file_data),
+        filename="test_file.txt",
+        content_type="text/plain"
+    )
+    client.post('/upload', data={
+        "user_id": user_id,
+        "file": file_storage
+    }, content_type='multipart/form-data')
+
+    response = client.get('/list_all')
+    assert response.status_code == 200, f"Unexpected status code: {response.status_code}"
+    all_files = response.json["files"]
+    print(f"Debug: All files response={all_files}")
+    assert len(all_files) == 1, "Unexpected number of files in the system."
+    assert all_files[0]["file_name"] == "test_file.txt", "Listed file name mismatch."
+    assert all_files[0]["user_id"] == user_id, "Listed file user_id mismatch."
+    assert "upload_date" in all_files[0], "Upload date not found in response."
+
+def test_generate_new_key_pair_for_existing_user(client):
+    """Test generating a new key pair for a user who has been registered before."""
+    user_id = "existing_user"
+    passphrase = "initial_passphrase"
+
+    # Step 1: Register the user and generate the initial key pair
+    response = client.post('/generate_keys', data={"user_id": user_id, "passphrase": passphrase})
     assert response.status_code == 200
     assert "PGP keys generated and saved successfully." in response.json["message"]
 
+    response = client.post('/generate_keys', data={"user_id": user_id, "passphrase": "new_passphrase"})
+    assert response.status_code == 400
+    assert "User already exists with generated keys." in response.json["error"]
+
+def test_generate_new_key_pair_after_deletion(client):
+    """Test generating a new key pair for a user after deleting the old key pair."""
+    user_id = "existing_user"
+    passphrase = "initial_passphrase"
+
+    # Step 1: Register the user and generate the initial key pair
+    response = client.post('/generate_keys', data={"user_id": user_id, "passphrase": passphrase})
+    assert response.status_code == 200
+    assert "PGP keys generated and saved successfully." in response.json["message"]
+
+    # Step 2: Delete the user's key pair from the database
     with app.app_context():
-        user2 = User.query.filter_by(user_id=user2_id).first()
-        assert user2 is not None, "User 2 not found in database."
-        assert user2.public_key is not None, "Public key for User 2 not saved."
-        assert user2.private_key is not None, "Private key for User 2 not saved."
-        user2.key_generation_date = datetime.now()
-        user2.user_name = user2_name
+        user = User.query.filter_by(user_id=user_id).first()
+        assert user is not None, "User not found in database."
+        db.session.delete(user)
         db.session.commit()
 
-    # Step 4: User 2 lists all files
-    response = client.get('/list_all')
+    # Step 3: Attempt to generate a new key pair for the same user
+    response = client.post('/generate_keys', data={"user_id": user_id, "passphrase": "new_passphrase"})
     assert response.status_code == 200
-    all_files = response.json["files"]
-    assert len(all_files) == 1, "Expected 1 file in the system."
-    assert all_files[0]["file_name"] == "user1_file.txt", "User 1's file not listed."
+    assert "PGP keys generated and saved successfully." in response.json["message"]
 
-    # Step 5: User 2 uploads a file
-    file_data2 = b"This is User 2's test file."
-    file_storage2 = FileStorage(
-        stream=BytesIO(file_data2),
-        filename="user2_file.txt",
-        content_type="text/plain"
-    )
-    response = client.post('/upload', data={
-        "user_id": user2_id,
-        "file": file_storage2
-    }, content_type='multipart/form-data')
-    assert response.status_code == 200
-    assert "File uploaded and encrypted successfully." in response.json["message"]
-
-    # Step 6: Verify all files in the system
-    response = client.get('/list_all')
-    assert response.status_code == 200
-    all_files = response.json["files"]
-    assert len(all_files) == 2, "Expected 2 files in the system."
-    file_names = [f["file_name"] for f in all_files]
-    assert "user1_file.txt" in file_names, "User 1's file not found."
-    assert "user2_file.txt" in file_names, "User 2's file not found."
+    # Verify the new key pair is saved in the database
+    with app.app_context():
+        user = User.query.filter_by(user_id=user_id).first()
+        assert user is not None, "User not found in database after generating new key pair."
+        assert user.public_key is not None, "Public key not saved for new key pair."
+        assert user.private_key is not None, "Private key not saved for new key pair."

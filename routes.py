@@ -81,7 +81,7 @@ def init_routes(app: Flask):
             user_id=user_id,
             file_name=uploaded_file.filename,
             encrypted_content=str(encrypted_data).encode('utf-8'),
-            upload_date=datetime.utcnow()
+            upload_date=datetime.utcnow()  # Ensure upload_date is set
         )
         db.session.add(encrypted_file)
         db.session.commit()
@@ -104,7 +104,7 @@ def init_routes(app: Flask):
         if not files:
             return jsonify({"message": "No files found for this user."}), 200
 
-        file_list = [{"file_name": f.file_name, "id": f.id, "upload_date": f.upload_date} for f in files]
+        file_list = [{"file_name": f.file_name, "id": f.id, "upload_date": f.upload_date, "uploaded_by": f.user_id} for f in files]
         return jsonify({"files": file_list}), 200
 
     @app.route('/decrypt', methods=['POST'])
