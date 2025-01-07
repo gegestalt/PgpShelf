@@ -11,7 +11,6 @@ def client():
     app.testing = True
     client = app.test_client()
 
-    # Reset the database
     with app.app_context():
         db.drop_all()
         db.create_all()
