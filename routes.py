@@ -142,13 +142,14 @@ def init_routes(app: Flask):
 
     @app.route('/list_all', methods=['GET'])
     def list_all_files():
-        """List all files with encrypted content."""
+        """List all files with encrypted content and their file IDs."""
         files = EncryptedFile.query.all()
         if not files:
             return jsonify({"files": []}), 200
 
         file_list = [
             {
+                "file_id": f.id,
                 "file_name": f.file_name,
                 "user_id": f.user_id,
                 "encrypted_content": base64.b64encode(f.encrypted_content).decode('utf-8'),
@@ -157,6 +158,7 @@ def init_routes(app: Flask):
             for f in files
         ]
         return jsonify({"files": file_list}), 200
+
 
     @app.route('/download/<int:file_id>', methods=['GET'])
     def download_file(file_id):
