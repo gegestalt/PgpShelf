@@ -1,8 +1,10 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file, make_response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 import gnupg
 import os
 from models import db, User, EncryptedFile
+from io import BytesIO
+import mimetypes
 
 file_bp = Blueprint('file', __name__)
 gpg = gnupg.GPG(gnupghome=os.path.expanduser("~/.gnupg"))
@@ -113,7 +115,7 @@ def list_user_files():
 @file_bp.route('/decrypt', methods=['POST'])
 @jwt_required()
 def decrypt_file():
-    """Decrypt a file for an authorized user."""
+    """Decrypt a file for an authorized user and return it as a download."""
     current_user = get_jwt_identity()
     file_id = request.form.get('file_id')
     passphrase = request.form.get('passphrase')
@@ -121,28 +123,15 @@ def decrypt_file():
     if not file_id or not passphrase:
         return jsonify({"error": "File ID and passphrase are required."}), 400
 
-    # Use db.session.get() instead of query.get()
+    # Get the file and check authorization
     encrypted_file = db.session.get(EncryptedFile, file_id)
     if not encrypted_file:
         return jsonify({"error": "File not found."}), 404
 
-    # Then check if user owns the file
     if encrypted_file.user_id != current_user:
         return jsonify({"error": "You are not authorized to decrypt this file."}), 403
 
-    # Get user's private key using modern query style
-    user = db.session.scalar(
-        db.select(User).filter_by(user_id=current_user)
-    )
-    if not user or not user.private_key:
-        return jsonify({"error": "User keys not found."}), 404
-
     try:
-        # Import private key
-        import_result = gpg.import_keys(user.private_key)
-        if not import_result.fingerprints:
-            return jsonify({"error": "Failed to import private key."}), 500
-
         # Decrypt the file
         decrypted_data = gpg.decrypt(
             encrypted_file.encrypted_content,
@@ -152,10 +141,28 @@ def decrypt_file():
         if not decrypted_data.ok:
             return jsonify({"error": "Decryption failed."}), 400
 
-        return jsonify({
-            "file_name": encrypted_file.file_name,
-            "content": str(decrypted_data)
-        }), 200
+        # Get the binary data directly
+        binary_data = decrypted_data.data
+        
+        # Create BytesIO object
+        file_stream = BytesIO(binary_data)
+        
+        # Guess the MIME type
+        mime_type = mimetypes.guess_type(encrypted_file.file_name)[0] or 'application/octet-stream'
+        
+        # Create the response
+        response = make_response(send_file(
+            file_stream,
+            mimetype=mime_type,
+            as_attachment=True,
+            download_name=encrypted_file.file_name
+        ))
+        
+        # Set headers for file download
+        response.headers['Content-Disposition'] = f'attachment; filename="{encrypted_file.file_name}"'
+        response.headers['Content-Type'] = mime_type
+        
+        return response
 
     except Exception as e:
         return jsonify({"error": f"Decryption error: {str(e)}"}), 500
@@ -201,3 +208,82 @@ def verify_encryption(file_id):
         "is_encrypted": is_encrypted,
         "encryption_header": content[:50] + "..."  # Show first 50 chars
     }), 200
+
+@file_bp.route('/decrypt/info', methods=['POST'])
+@jwt_required()
+def get_decrypt_info():
+    """Get information about the encrypted file before downloading."""
+    current_user = get_jwt_identity()
+    file_id = request.form.get('file_id')
+    
+    if not file_id:
+        return jsonify({"error": "File ID is required."}), 400
+
+    # Get the file and check authorization
+    encrypted_file = db.session.get(EncryptedFile, file_id)
+    if not encrypted_file:
+        return jsonify({"error": "File not found."}), 404
+
+    if encrypted_file.user_id != current_user:
+        return jsonify({"error": "You are not authorized to access this file."}), 403
+
+    return jsonify({
+        "file_name": encrypted_file.file_name,
+        "upload_date": encrypted_file.upload_date.isoformat(),
+        "file_id": encrypted_file.id,
+        "download_url": f"/file/decrypt/download/{file_id}"
+    }), 200
+
+@file_bp.route('/decrypt/download/<file_id>', methods=['POST'])
+@jwt_required()
+def download_decrypted_file(file_id):
+    """Download the decrypted file."""
+    current_user = get_jwt_identity()
+    passphrase = request.form.get('passphrase')
+
+    if not passphrase:
+        return jsonify({"error": "Passphrase is required."}), 400
+
+    # Get the file and check authorization
+    encrypted_file = db.session.get(EncryptedFile, file_id)
+    if not encrypted_file:
+        return jsonify({"error": "File not found."}), 404
+
+    if encrypted_file.user_id != current_user:
+        return jsonify({"error": "You are not authorized to decrypt this file."}), 403
+
+    try:
+        # Decrypt the file
+        decrypted_data = gpg.decrypt(
+            encrypted_file.encrypted_content,
+            passphrase=passphrase
+        )
+
+        if not decrypted_data.ok:
+            return jsonify({"error": "Decryption failed."}), 400
+
+        # Get the binary data directly
+        binary_data = decrypted_data.data
+        
+        # Create BytesIO object
+        file_stream = BytesIO(binary_data)
+        
+        # Guess the MIME type
+        mime_type = mimetypes.guess_type(encrypted_file.file_name)[0] or 'application/octet-stream'
+        
+        # Create the response
+        response = make_response(send_file(
+            file_stream,
+            mimetype=mime_type,
+            as_attachment=True,
+            download_name=encrypted_file.file_name
+        ))
+        
+        # Set headers for file download
+        response.headers['Content-Disposition'] = f'attachment; filename="{encrypted_file.file_name}"'
+        response.headers['Content-Type'] = mime_type
+        
+        return response
+
+    except Exception as e:
+        return jsonify({"error": f"Decryption error: {str(e)}"}), 500
