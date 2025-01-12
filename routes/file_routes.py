@@ -179,3 +179,26 @@ def list_all_files():
         }), 200
     except Exception as e:
         return jsonify({"error": f"Failed to list files: {str(e)}"}), 500
+
+@file_bp.route('/verify/<file_id>', methods=['GET'])
+@jwt_required()
+def verify_encryption(file_id):
+    """Verify that a file is encrypted."""
+    current_user = get_jwt_identity()
+    
+    encrypted_file = db.session.get(EncryptedFile, file_id)
+    if not encrypted_file:
+        return jsonify({"error": "File not found"}), 404
+        
+    if encrypted_file.user_id != current_user:
+        return jsonify({"error": "Not authorized"}), 403
+    
+    # Check if content is encrypted (should start with '-----BEGIN PGP MESSAGE-----')
+    content = encrypted_file.encrypted_content.decode()
+    is_encrypted = content.startswith('-----BEGIN PGP MESSAGE-----')
+    
+    return jsonify({
+        "file_name": encrypted_file.file_name,
+        "is_encrypted": is_encrypted,
+        "encryption_header": content[:50] + "..."  # Show first 50 chars
+    }), 200
