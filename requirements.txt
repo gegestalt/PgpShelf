@@ -1,0 +1,8 @@
+flask==2.0.1
+flask-sqlalchemy==2.5.1
+flask-migrate==3.1.0
+python-gnupg==0.4.8
+pytest==7.0.1
+python-jose==3.3.0  # For JWT handling
+flask-jwt-extended==4.4.4  # Flask JWT integration
+bcrypt==3.2.2  # For password hashing 
