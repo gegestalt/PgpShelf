@@ -159,7 +159,7 @@ def init_routes(app: Flask):
         return jsonify({"files": file_list}), 200
 
 
-    @app.route('/download/<int:file_id>', methods=['GET'])
+    @app.route('/download/<string:file_id>', methods=['GET'])
     def download_file(file_id):
         """Download an encrypted file."""
         encrypted_file = EncryptedFile.query.filter_by(id=file_id).first()
