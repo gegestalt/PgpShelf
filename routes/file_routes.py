@@ -193,7 +193,6 @@ def verify_encryption(file_id):
     if encrypted_file.user_id != current_user:
         return jsonify({"error": "Not authorized"}), 403
     
-    # Check if content is encrypted (should start with '-----BEGIN PGP MESSAGE-----')
     content = encrypted_file.encrypted_content.decode()
     is_encrypted = content.startswith('-----BEGIN PGP MESSAGE-----')
     
