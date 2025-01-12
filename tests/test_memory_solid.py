@@ -1,49 +1,70 @@
 import pytest
 from werkzeug.datastructures import FileStorage
 from io import BytesIO
-from app import app, db
-from models import User, EncryptedFile
+from flask import Flask
+from flask_jwt_extended import JWTManager
+from models import db, User, EncryptedFile
 from sqlalchemy import inspect
 
+# Import your routes
+from routes.auth import auth_bp
+from routes.file_routes import file_bp
+
 @pytest.fixture
-def client():
-    """Set up the test client and mock database session."""
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
-    app.config['TESTING'] = True
-    app.config['JWT_SECRET_KEY'] = 'test-secret-key'
-    
-    with app.test_client() as client:
-        with app.app_context():
-            db.create_all()
-            yield client
-            db.drop_all()
-
-def get_auth_token(client, user_id="testuser", password="testpassword", email="test@example.com"):
-    """Helper function to register a user and get auth token."""
-    # Register user
-    client.post('/auth/register', json={
-        'user_id': user_id,
-        'email': email,
-        'password': password
+def app():
+    """Create and configure a new app instance for each test."""
+    app = Flask(__name__)
+    app.config.update({
+        'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:',
+        'SQLALCHEMY_TRACK_MODIFICATIONS': False,
+        'TESTING': True,
+        'JWT_SECRET_KEY': 'test-secret-key'
     })
     
-    # Login to get token
-    response = client.post('/auth/login', json={
-        'user_id': user_id,
-        'password': password
-    })
-    return response.json['access_token']
+    # Initialize extensions
+    db.init_app(app)
+    JWTManager(app)
+    
+    # Register blueprints
+    app.register_blueprint(auth_bp, url_prefix='/auth')
+    app.register_blueprint(file_bp, url_prefix='/file')
+    
+    # Create tables and context
+    with app.app_context():
+        db.create_all()
+        yield app
+        db.drop_all()
 
-def test_schema_initialized(client):
+@pytest.fixture
+def client(app):
+    return app.test_client()
+
+def test_schema_initialized(app):
     """Ensure the in-memory database schema is initialized properly."""
     with app.app_context():
         inspector = inspect(db.engine)
         tables = inspector.get_table_names()
-        
-        # Include all expected tables
-        expected_tables = {"user", "encrypted_file", "alembic_version"}
-        
+        expected_tables = {"user", "encrypted_file"}
         assert set(tables) == expected_tables, f"Tables not initialized correctly, found: {tables}"
+
+def get_auth_token(client, user_id="testuser", password="testpassword", email="test@example.com"):
+    """Helper function to register a user and get auth token."""
+    # Register user
+    register_response = client.post('/auth/register', json={
+        'user_id': user_id,
+        'email': email,
+        'password': password
+    })
+    assert register_response.status_code == 201, f"Registration failed: {register_response.data}"
+    
+    # Login to get token
+    login_response = client.post('/auth/login', json={
+        'user_id': user_id,
+        'password': password
+    })
+    assert login_response.status_code == 200, f"Login failed: {login_response.data}"
+    
+    return login_response.json['access_token']
 
 def test_generate_keys(client):
     """Test key pair generation for a user."""

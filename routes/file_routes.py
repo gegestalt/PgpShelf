@@ -163,12 +163,19 @@ def decrypt_file():
 @file_bp.route('/list_all', methods=['GET'])
 @jwt_required()
 def list_all_files():
-    """List all files in the system."""
-    files = EncryptedFile.query.all()
-    file_list = [{
-        "id": f.id,
-        "file_name": f.file_name,
-        "upload_date": f.upload_date.isoformat(),
-        "user_id": f.user_id
-    } for f in files]
-    return jsonify({"files": file_list}), 200
+    """List all files for the current user."""
+    try:
+        # Use modern SQLAlchemy style
+        files = db.session.scalars(
+            db.select(EncryptedFile)
+        ).all()
+        
+        return jsonify({
+            "files": [{
+                "id": str(file.id),
+                "file_name": file.file_name,
+                "upload_date": file.upload_date.isoformat()
+            } for file in files]
+        }), 200
+    except Exception as e:
+        return jsonify({"error": f"Failed to list files: {str(e)}"}), 500
