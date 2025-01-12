@@ -1,9 +1,3 @@
 {
-  "tests/test_memory_solid.py::test_list_all_files": true,
-  "tests/test_memory_solid.py::test_schema_initialized": true,
-  "tests/test_memory_solid.py::test_generate_keys": true,
-  "tests/test_memory_solid.py::test_upload_file": true,
-  "tests/test_memory_solid.py::test_list_user_files": true,
-  "tests/test_memory_solid.py::test_decrypt_file": true,
-  "tests/test_memory_solid.py": true
+  "tests/test_memory_solid.py::test_list_all_files": true
 }
