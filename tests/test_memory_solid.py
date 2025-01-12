@@ -146,3 +146,55 @@ def test_decrypt_file(client):
     
     assert response.status_code == 200
     assert "content" in response.json
+
+def test_unauthorized_file_decrypt(client):
+    """Test that a user cannot decrypt another user's file."""
+    # Create first user and upload a file
+    token1 = get_auth_token(client, 
+        user_id="user1", 
+        password="password1", 
+        email="user1@example.com")
+    
+    # Generate keys for first user
+    client.post('/file/generate_keys', 
+        data={"passphrase": "user1_passphrase"},
+        headers={'Authorization': f'Bearer {token1}'})
+
+    # Upload file as first user
+    file_data = b"Secret data that user2 shouldn't see"
+    file_storage = FileStorage(
+        stream=BytesIO(file_data),
+        filename="secret.txt",
+        content_type="text/plain"
+    )
+    
+    upload_response = client.post('/file/upload', 
+        data={"file": file_storage},
+        headers={'Authorization': f'Bearer {token1}'},
+        content_type='multipart/form-data')
+    assert upload_response.status_code == 200
+    file_id = upload_response.json["file_id"]
+
+    # Create second user and try to decrypt first user's file
+    token2 = get_auth_token(client, 
+        user_id="user2", 
+        password="password2", 
+        email="user2@example.com")
+    
+    # Generate keys for second user
+    client.post('/file/generate_keys', 
+        data={"passphrase": "user2_passphrase"},
+        headers={'Authorization': f'Bearer {token2}'})
+
+    # Attempt to decrypt file as second user
+    response = client.post('/file/decrypt', 
+        data={
+            "file_id": file_id,
+            "passphrase": "user2_passphrase"
+        },
+        headers={'Authorization': f'Bearer {token2}'})
+    
+    # Should get a 403 Forbidden response
+    assert response.status_code == 403
+    assert "error" in response.json
+    assert "not authorized" in response.json["error"].lower()
