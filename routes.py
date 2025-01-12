@@ -6,7 +6,6 @@ from datetime import datetime
 from models import db, User, EncryptedFile
 
 def init_routes(app: Flask):
-    # Initialize GPG with compatibility options
     gpg = gnupg.GPG(gnupghome=os.path.expanduser("~/.gnupg"))
     gpg.options = ["--digest-algo", "SHA256"]
 
