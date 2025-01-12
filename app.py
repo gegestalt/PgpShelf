@@ -8,7 +8,6 @@ app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///file_data.db'  # Update as needed
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Initialize extensions
 db.init_app(app)
 migrate = Migrate(app, db)  # Add Flask-Migrate here
 
