@@ -232,3 +232,100 @@ def test_file_access_permissions(client, app):
             assert own_file_download.status_code == 200, f"User should be able to download their own file"
 
     print("File access permissions verified successfully!") 
+
+def test_file_upload_with_hash(client, app):
+    """Test file upload includes correct hash value."""
+    token = get_auth_token(client)
+    
+    # Generate keys first
+    client.post('/file/generate_keys', 
+        data={"passphrase": "test_passphrase"},
+        headers={'Authorization': f'Bearer {token}'})
+
+    # Upload file
+    upload_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'upload')
+    test_file = [f for f in os.listdir(upload_dir) if os.path.isfile(os.path.join(upload_dir, f))][0]
+    file_path = os.path.join(upload_dir, test_file)
+    
+    with open(file_path, 'rb') as f:
+        file_storage = FileStorage(
+            stream=open(file_path, 'rb'),
+            filename=test_file,
+            content_type='application/octet-stream'
+        )
+        
+        upload_response = client.post('/file/upload',
+            data={'file': file_storage},
+            headers={
+                'Authorization': f'Bearer {token}',
+                'Content-Type': 'multipart/form-data'
+            })
+        file_storage.stream.close()
+        
+        assert upload_response.status_code == 200
+        assert 'file_id' in upload_response.json
+        assert 'content_hash' in upload_response.json
+        
+        # Verify hash exists in database using modern SQLAlchemy style
+        with app.app_context():
+            file = db.session.get(EncryptedFile, upload_response.json['file_id'])
+            assert file.content_hash == upload_response.json['content_hash']
+            assert len(file.content_hash) == 64  # SHA-256 hash length
+
+def test_list_files_with_hash(client, app):
+    """Test that file listing includes hash values."""
+    token = get_auth_token(client)
+    
+    # Generate keys and upload file
+    client.post('/file/generate_keys', 
+        data={"passphrase": "test_passphrase"},
+        headers={'Authorization': f'Bearer {token}'})
+
+    # Upload a test file
+    upload_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'upload')
+    test_file = [f for f in os.listdir(upload_dir) if os.path.isfile(os.path.join(upload_dir, f))][0]
+    file_path = os.path.join(upload_dir, test_file)
+    
+    with open(file_path, 'rb') as f:
+        file_storage = FileStorage(
+            stream=open(file_path, 'rb'),
+            filename=test_file,
+            content_type='application/octet-stream'
+        )
+        
+        upload_response = client.post('/file/upload',
+            data={'file': file_storage},
+            headers={
+                'Authorization': f'Bearer {token}',
+                'Content-Type': 'multipart/form-data'
+            })
+        file_storage.stream.close()
+
+    # Get file listing
+    list_response = client.get('/file/files',
+        headers={'Authorization': f'Bearer {token}'})
+    
+    assert list_response.status_code == 200
+    files = list_response.json['files']
+    assert len(files) > 0
+    
+    # Verify hash is included in listing
+    for file in files:
+        assert 'content_hash' in file
+        assert len(file['content_hash']) == 64 
+
+def get_auth_token(client, user_id="testuser", password="testpassword", email="test@example.com"):
+    """Helper function to register a user and get auth token."""
+    # Register user
+    register_response = client.post('/auth/register', json={
+        'user_id': user_id,
+        'email': email,
+        'password': password
+    })
+    
+    # Login to get token
+    login_response = client.post('/auth/login', json={
+        'user_id': user_id,
+        'password': password
+    })
+    return login_response.json['access_token'] 

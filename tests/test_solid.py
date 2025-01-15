@@ -108,7 +108,6 @@ def test_list_user_files(client):
 
 def test_decrypt_file(client):
     """Test decrypting an uploaded file."""
-    # Get auth token
     token = get_auth_token(client)
     
     # Generate keys first
@@ -124,22 +123,19 @@ def test_decrypt_file(client):
         content_type="text/plain"
     )
     
-    upload_response = client.post('/file/upload', 
+    upload_response = client.post('/file/upload',
         data={"file": file_storage},
         headers={'Authorization': f'Bearer {token}'},
         content_type='multipart/form-data')
     file_id = upload_response.json["file_id"]
 
     # Decrypt file
-    response = client.post('/file/decrypt', 
-        data={
-            "file_id": file_id,
-            "passphrase": "test_passphrase"
-        },
+    response = client.post(f'/file/decrypt/download/{file_id}',
+        data={"passphrase": "test_passphrase"},
         headers={'Authorization': f'Bearer {token}'})
     
     assert response.status_code == 200
-    assert "content" in response.json
+    assert response.data == file_data
 
 def test_list_all_files(client):
     """Test listing all files in the system."""

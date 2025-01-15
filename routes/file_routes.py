@@ -83,17 +83,18 @@ def upload_file():
             return jsonify({"error": "Encryption failed."}), 500
 
         # Save encrypted file
-        encrypted_file = EncryptedFile(
+        new_file = EncryptedFile(
             user_id=current_user,
             file_name=file.filename,
             encrypted_content=str(encrypted_data).encode()
         )
-        db.session.add(encrypted_file)
+        db.session.add(new_file)
         db.session.commit()
 
         return jsonify({
-            "message": "File uploaded and encrypted successfully.",
-            "file_id": encrypted_file.id
+            'file_id': new_file.id,
+            'content_hash': new_file.content_hash,
+            'message': 'File uploaded and encrypted successfully.'
         }), 200
 
     except Exception as e:
@@ -101,16 +102,18 @@ def upload_file():
 
 @file_bp.route('/files', methods=['GET'])
 @jwt_required()
-def list_user_files():
+def list_files():
     """List files for current user."""
     current_user = get_jwt_identity()
     files = EncryptedFile.query.filter_by(user_id=current_user).all()
-    file_list = [{
-        "id": f.id,
-        "file_name": f.file_name,
-        "upload_date": f.upload_date.isoformat(),
-    } for f in files]
-    return jsonify({"files": file_list}), 200
+    return jsonify({
+        'files': [{
+            'id': file.id,
+            'file_name': file.file_name,
+            'upload_date': file.upload_date,
+            'content_hash': file.content_hash
+        } for file in files]
+    }), 200
 
 @file_bp.route('/decrypt', methods=['POST'])
 @jwt_required()
