@@ -30,6 +30,7 @@
   "tests/test_memory_solid.py::test_unauthorized_file_decrypt",
   "tests/test_memory_solid.py::test_unauthorized_file_decrypt_download",
   "tests/test_memory_solid.py::test_upload_file",
+  "tests/test_populate_db.py::test_populate_database",
   "tests/test_solid.py::test_decrypt_file",
   "tests/test_solid.py::test_generate_keys",
   "tests/test_solid.py::test_list_all_files",
