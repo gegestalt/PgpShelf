@@ -127,3 +127,108 @@ def test_populate_database(client, app):
             assert len(user_files) == 1, f"User {user['user_id']} should have exactly one file"
 
     print("Database populated and verified successfully!") 
+
+def test_file_access_permissions(client, app):
+    """Test that users can only access their own files."""
+    # Sample users data
+    users = [
+        {
+            'user_id': 'john_doe',
+            'email': 'john@example.com',
+            'password': 'password123',
+            'passphrase': 'john_secret'
+        },
+        {
+            'user_id': 'jane_smith',
+            'email': 'jane@example.com',
+            'password': 'password456',
+            'passphrase': 'jane_secret'
+        }
+    ]
+    
+    # Get list of files from upload directory
+    upload_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'upload')
+    files = [f for f in os.listdir(upload_dir) if os.path.isfile(os.path.join(upload_dir, f))]
+    assert len(files) >= 2, "Need at least 2 files in the upload directory"
+    
+    user_files = {}  # Store file IDs for each user
+    
+    # Create users and upload their files
+    with app.app_context():
+        for user, filename in zip(users, files[:2]):  # Take first 2 files
+            # Register user
+            register_response = client.post('/auth/register', json={
+                'user_id': user['user_id'],
+                'email': user['email'],
+                'password': user['password']
+            })
+            assert register_response.status_code == 201
+            
+            # Login to get token
+            login_response = client.post('/auth/login', json={
+                'user_id': user['user_id'],
+                'password': user['password']
+            })
+            token = login_response.json['access_token']
+            
+            # Generate keys
+            client.post('/file/generate_keys',
+                data={'passphrase': user['passphrase']},
+                headers={'Authorization': f'Bearer {token}'})
+            
+            # Upload file
+            file_path = os.path.join(upload_dir, filename)
+            with open(file_path, 'rb') as f:
+                file_storage = FileStorage(
+                    stream=open(file_path, 'rb'),
+                    filename=filename,
+                    content_type='application/octet-stream'
+                )
+                
+                upload_response = client.post('/file/upload',
+                    data={'file': file_storage},
+                    headers={
+                        'Authorization': f'Bearer {token}',
+                        'Content-Type': 'multipart/form-data'
+                    })
+                assert upload_response.status_code == 200
+                user_files[user['user_id']] = upload_response.json['file_id']
+                file_storage.stream.close()
+        
+        # Test file access permissions
+        for i, user in enumerate(users):
+            # Login as current user
+            login_response = client.post('/auth/login', json={
+                'user_id': user['user_id'],
+                'password': user['password']
+            })
+            token = login_response.json['access_token']
+            
+            # Try to access own file
+            own_file_response = client.post('/file/decrypt/info',
+                data={'file_id': user_files[user['user_id']]},
+                headers={'Authorization': f'Bearer {token}'})
+            assert own_file_response.status_code == 200, f"User cannot access their own file"
+            
+            # Try to access other user's file
+            other_user = users[(i + 1) % len(users)]
+            other_file_response = client.post('/file/decrypt/info',
+                data={'file_id': user_files[other_user['user_id']]},
+                headers={'Authorization': f'Bearer {token}'})
+            assert other_file_response.status_code == 403, f"User should not be able to access other user's file"
+            
+            # Try to download other user's file
+            other_file_download = client.post(
+                f"/file/decrypt/download/{user_files[other_user['user_id']]}",
+                data={'passphrase': user['passphrase']},
+                headers={'Authorization': f'Bearer {token}'})
+            assert other_file_download.status_code == 403, f"User should not be able to download other user's file"
+            
+            # Verify successful download of own file
+            own_file_download = client.post(
+                f"/file/decrypt/download/{user_files[user['user_id']]}",
+                data={'passphrase': user['passphrase']},
+                headers={'Authorization': f'Bearer {token}'})
+            assert own_file_download.status_code == 200, f"User should be able to download their own file"
+
+    print("File access permissions verified successfully!") 
