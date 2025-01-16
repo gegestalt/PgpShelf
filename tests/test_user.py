@@ -132,9 +132,33 @@ def test_decrypt_file(client):
     assert response.data == file_data
 
 def test_list_all_files(client):
-    """Test listing all files in the system."""
+    """Test listing all files in the system includes hash values."""
     token = get_auth_token(client)
     
-    response = client.get('/file/files',
+    # Upload a test file first
+    client.post('/file/generate_keys',
+        data={"passphrase": "test_passphrase"},
+        headers={'Authorization': f'Bearer {token}'})
+
+    file_data = b"Test file content"
+    file_storage = FileStorage(
+        stream=BytesIO(file_data),
+        filename="test_file.txt",
+        content_type="text/plain"
+    )
+    
+    upload_response = client.post('/file/upload',
+        data={"file": file_storage},
+        headers={'Authorization': f'Bearer {token}'})
+    assert upload_response.status_code == 200
+    
+    # Test list_all endpoint
+    response = client.get('/file/list_all',
         headers={'Authorization': f'Bearer {token}'})
     assert response.status_code == 200
+    
+    files = response.json['files']
+    assert len(files) > 0
+    for file in files:
+        assert 'content_hash' in file
+        assert len(file['content_hash']) == 64  # SHA-256 hash length

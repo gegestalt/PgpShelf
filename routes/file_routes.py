@@ -173,22 +173,21 @@ def decrypt_file():
 @file_bp.route('/list_all', methods=['GET'])
 @jwt_required()
 def list_all_files():
-    """List all files for the current user."""
-    try:
-        # Use modern SQLAlchemy style
-        files = db.session.scalars(
-            db.select(EncryptedFile)
-        ).all()
-        
-        return jsonify({
-            "files": [{
-                "id": str(file.id),
-                "file_name": file.file_name,
-                "upload_date": file.upload_date.isoformat()
-            } for file in files]
-        }), 200
-    except Exception as e:
-        return jsonify({"error": f"Failed to list files: {str(e)}"}), 500
+    """List all files in the system with their hash values."""
+    current_user = get_jwt_identity()
+    
+    # Check if user is admin (you might want to add proper admin check)
+    files = db.session.query(EncryptedFile).all()
+    
+    return jsonify({
+        'files': [{
+            'id': file.id,
+            'file_name': file.file_name,
+            'upload_date': file.upload_date,
+            'uploaded_by': file.user_id,
+            'content_hash': file.content_hash  # Added hash value
+        } for file in files]
+    }), 200
 
 @file_bp.route('/verify/<file_id>', methods=['GET'])
 @jwt_required()

@@ -4,7 +4,6 @@ import uuid
 from werkzeug.security import generate_password_hash, check_password_hash
 import hashlib
 
-# Initialize the db instance in your app.py
 db = SQLAlchemy()
 
 class EncryptedFile(db.Model):
