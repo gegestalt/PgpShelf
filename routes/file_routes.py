@@ -289,3 +289,63 @@ def download_decrypted_file(file_id):
 
     except Exception as e:
         return jsonify({"error": f"Decryption error: {str(e)}"}), 500
+
+
+@file_bp.route('/share_with', methods=['POST'])
+@jwt_required()
+def share_with_user():
+    """Share a file directly with a user by encrypting it with their public key."""
+    current_user = get_jwt_identity()
+    
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided."}), 400
+    
+    recipient_id = request.form.get('recipient_id')
+    if not recipient_id:
+        return jsonify({"error": "Recipient ID is required."}), 400
+        
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({"error": "No file selected."}), 400
+
+    # Get recipient's public key
+    recipient = db.session.scalar(
+        db.select(User).filter_by(user_id=recipient_id)
+    )
+    if not recipient or not recipient.public_key:
+        return jsonify({"error": "Recipient not found or doesn't have keys generated."}), 404
+
+    try:
+        # Import recipient's public key
+        import_result = gpg.import_keys(recipient.public_key)
+        if not import_result.fingerprints:
+            return jsonify({"error": "Failed to import recipient's public key."}), 500
+
+        # Encrypt file directly for recipient
+        file_content = file.read()
+        encrypted_data = gpg.encrypt(
+            file_content,
+            import_result.fingerprints[0],
+            always_trust=True
+        )
+
+        if not encrypted_data.ok:
+            return jsonify({"error": "Encryption failed."}), 500
+
+        # Save encrypted file for recipient
+        new_file = EncryptedFile(
+            user_id=recipient_id,  # File belongs to recipient
+            file_name=f"from_{current_user}_{file.filename}",
+            encrypted_content=str(encrypted_data).encode()
+        )
+        db.session.add(new_file)
+        db.session.commit()
+
+        return jsonify({
+            'message': 'File shared successfully',
+            'file_id': new_file.id,
+            'content_hash': new_file.content_hash
+        }), 200
+
+    except Exception as e:
+        return jsonify({"error": f"Sharing failed: {str(e)}"}), 500
